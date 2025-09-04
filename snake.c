@@ -10,6 +10,7 @@
 /*====(Defines)====*/
 #define CONTROL_KEY(k) ((k) & 0x1f)	//Sets upper 3 bits to 0. (Basically mimics how Ctrl key works in the terminal)
 
+FILE * logFile;
 
 /*====( Variables )====*/
 enum DIRECTION{
@@ -62,6 +63,10 @@ void killSnake(){
 	free(snake.HEAD);
 }
 
+void closeLog(){
+	fclose(logFile);
+}
+
 void kill(const char * c){
 	write(STDOUT_FILENO, "\x1b[2J", 4);
 	write(STDOUT_FILENO, "\x1b[H", 3);
@@ -69,6 +74,7 @@ void kill(const char * c){
 	write(STDOUT_FILENO, "\x1b[?25h", 6);
 
 	killSnake();
+	closeLog();
 
 	perror(c);
 	exit(1);
@@ -124,6 +130,17 @@ int readKey(){
 		return c;		//Else just return the key pressed
 	}
 }
+
+int appendLog(const char* str){
+	printf("Pointer: %p", logFile);
+	if(!logFile){
+		kill("Log file not initalised!");
+		return -1;
+	}
+	fprintf(logFile, str);
+	return 1;
+}
+
 int getCursorPosition(int *rows, int * columns){
 	char buffer[32];
 	unsigned int i = 0;
@@ -151,6 +168,10 @@ int getWindowSize(int *rows, int * columns){
 	}else{
 		*columns = ws.ws_col;
 		*rows = ws.ws_row;
+		char str[50];
+		sprintf(str, "Cols: %d, Rows: %d\n", *columns, *rows);
+		appendLog(str);
+		
 		return 0;
 	}
 }
@@ -158,13 +179,17 @@ int getWindowSize(int *rows, int * columns){
 void drawRows(struct gameConfig * conf){
 	for(int i = 0; i < conf->winRows;i++){
 
-		write(STDOUT_FILENO, &conf->gameArr[i * conf->winCols], sizeof(int) * conf->winCols);
+		write(STDOUT_FILENO, &conf->gameArr[i * conf->winCols], sizeof(char) * conf->winCols);
 		write(STDOUT_FILENO, "\r\n", 2);
 	}
 }
 
 void bufferUpdateSnakePos(){
-	memset(&config.gameArr[snake.HEAD->posX + (snake.HEAD->posY * config.winRows)], 'S', 1);	
+	config.gameArr[snake.HEAD->posX + (snake.HEAD->posY * config.winCols)] = 'S';
+	char str[50];
+	sprintf(str, "Snake posXY: %d , %d, Index: %d\n", snake.HEAD->posX, snake.HEAD->posY, snake.HEAD->posX + (snake.HEAD->posY * config.winCols));
+	appendLog(str);
+//	memset(&config.gameArr[snake.HEAD->posX + (snake.HEAD->posY * config.winRows)], 'S', 1);	
 }
 
 void updateGameLogic(){
@@ -242,15 +267,23 @@ struct Snake initSnake(int x, int y){
 	return (Snake){HEAD, LEFT, 0};
 }
 
+FILE * initLogs(FILE * file){
+	file = fopen("logs.txt", "a");
+	return file;
+}
+
 void initEditor(){
 	config.cursorX = 0;		//Saving inital cursor position here
 	config.cursorY = 0;
+	logFile = initLogs(logFile);
 
 	if(getWindowSize(&config.winRows, &config.winCols) == -1) kill("Get Window size");
 	size_t nbytes = sizeof(char) * config.winCols * config.winRows;
 	config.gameArr = (char*)malloc(nbytes);
 	memset(config.gameArr, '.', nbytes);
 }
+
+
 
 int main(){
 	enableRawMode();	//Enabling rawmode here	
